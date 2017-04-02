@@ -139,59 +139,11 @@ void setup() {
     //Serial.begin(9600);
 }
 
-
-
-int sine[] = {
-    0,   6,  12,  18,  25,  31,  37,  44,
-    50,  56,  62,  68,  74,  80,  86,  92,
-    98, 104, 110, 115, 121, 127, 132, 137,
-    143, 148, 153, 158, 163, 168, 173, 177,
-    182, 186, 190, 194, 199, 202, 206, 210,
-    213, 217, 220, 223, 226, 229, 232, 234,
-    237, 239, 241, 243, 245, 247, 248, 250,
-    251, 252, 253, 254, 255, 255, 255, 255,
-};
-
-void rampAtoB(int d) {
-    int i,j;
-    int N = sizeof(sine)/sizeof(int);
-    for (i=0, j=N-1; i<N; i++, j--) {
-        OCR2A = sine[i];
-        OCR2B = sine[j];
-        delay(d);
-    }
-}
-
-void rampBtoA(int d) {
-    int i,j;
-    int N = sizeof(sine)/sizeof(int);
-    for (i=0, j=N-1; i<N; i++, j--) {
-        OCR2B = sine[i];
-        OCR2A = sine[j];
-        delay(d);
-    }
-}
-
 float theta = 0.;
-
-//const int d = 100;
-//float dtheta = 0.03;
-
-//const int d = 2000;
-// pi/4
-//float dtheta = 0.785398;
-// pi/8
-//float dtheta = 0.3927;
-
-//int d = 10;
-//float dtheta = 0.01;
-//float dtheta = 1.571 / 20;
-//float dtheta = 0.0785398163397448; // pi/40.
 int d=1;
 float dtheta = 0.01;
 
-int doserial = 0;
-
+/*
 float remap_theta(float t0) {
     float t = fmod(t0, M_PI/2.);
     if (t < 0.)
@@ -202,6 +154,7 @@ float remap_theta(float t0) {
     float dy = t - off;
     return t0 - t + knee + (dy >= 0 ? 1 : -1) * pow(abs(dy)/a, 2.5);
 }
+ */
 
 int isign(int i) {
     if (i > 0)
@@ -235,40 +188,31 @@ void loop() {
         dtheta *= -1;
     }
 
-
-    /*
-     if (doserial) {
-     Serial.print("Theta ");
-     Serial.print(theta);
-     Serial.print("  ");
-     }
-     if ((dtheta > 0) && (theta > 3*6.3)) {
-     if (doserial)
-     Serial.println("Change direction!");
-     dtheta *= -1;
-     }
-     if ((dtheta < 0) && (theta < 0.)) {
-     if (doserial)
-     Serial.println("Change direction!");
-     dtheta *= -1;
-     }
-     */  
     //float t = remap_theta(theta);
-    float t = -theta;
+    float t = theta;
     float s = sin(t);
     float c = cos(t);
-    //float s = sin(theta);
-    //float c = cos(theta);
 
-    //OCR2B = int(abs(255 * s));
-    //OCR2A = int(abs(255 * c));
-    int ic = int(255 * c);
-    int is = int(255 * s);
+    int ic = (int)(255 * c);
+    int is = (int)(255 * s);
+
+    int sgn;
+    sgn = isign(ic);
+    if (isign(lastic) != sgn) {
+        digitalWrite(MOTOR_B1_R, LOW);
+        digitalWrite(MOTOR_B1_F, LOW);
+    }
+    sgn = isign(is);
+    if (isign(lastis) != sgn) {
+        digitalWrite(MOTOR_B2_R, LOW);
+        digitalWrite(MOTOR_B2_F, LOW);
+    }
+
     analogWrite(MOTOR_B2_EN, abs(is));
-    analogWrite(MOTOR_B1_EN, abs(ic)); //int(abs(255 * c)));
+    analogWrite(MOTOR_B1_EN, abs(ic));
 
     // windings direction enable bits
-    int sgn = isign(ic);
+    sgn = isign(ic);
     if (isign(lastic) != sgn) {
         if (sgn == 0) {
             digitalWrite(MOTOR_B1_R, LOW);
@@ -316,231 +260,5 @@ void loop() {
     }
     delay(d);
     theta += dtheta;
-
 }
 
-
-void loopy() {
-    theta += dtheta;
-
-    if ((dtheta > 0) && (theta > 3.1)) {
-        dtheta *= -1;
-    }
-    if ((dtheta < 0) && (theta < 0.)) {
-        dtheta *= -1;
-    }
-  
-    float s = sin(theta);
-    float c = cos(theta);
-    //OCR2B = int(abs(255 * s));
-    //OCR2A = int(abs(255 * c));
-    int ic = int(255 * c);
-    int is = int(255 * s);
-    analogWrite(MB2EN, abs(is));
-    analogWrite(MB1EN, abs(ic)); //int(abs(255 * c)));
-
-    // windings direction enable bits
-    if (ic <= 0) {
-        digitalWrite(MB1R, LOW);
-        digitalWrite(MB1F, HIGH);
-    } else {
-        digitalWrite(MB1F, LOW);
-        digitalWrite(MB1R, HIGH);
-    }
-
-    if (is >= 0) {
-        digitalWrite(MB2R, LOW);
-        digitalWrite(MB2F, HIGH);
-    } else {
-        digitalWrite(MB2F, LOW);
-        digitalWrite(MB2R, HIGH);
-    }
-
-    /*
-     Serial.print("c=");
-     Serial.print(c);
-     Serial.print(", s=");
-     Serial.print(s);
-     Serial.print(", ic=");
-     Serial.print(ic); 
-     Serial.print(", is=");
-     Serial.print(is);
-     Serial.print(", abs ic=");
-     Serial.print(abs(ic));
-     Serial.print(", abs is=");
-     Serial.print(abs(is));
-     Serial.println("");
-     */
-    Serial.print("ic=");
-    Serial.print(ic);
-    Serial.print(", is=");
-    Serial.print(is);
-    Serial.print("   winding 1: F=");
-    Serial.print(digitalRead(MB1F));
-    Serial.print(", R=");
-    Serial.print(digitalRead(MB1R));
-    Serial.print("   winding 2: F=");
-    Serial.print(digitalRead(MB2F));
-    Serial.print(", R=");
-    Serial.print(digitalRead(MB2R));
-    Serial.println("");
-    Serial.flush();
-    delay(d);
-
-    /*
-     int d = 1;
-     forward(d);
-     forward(d);
-     forward(d);
-     forward(d);
-
-     reverse(d);
-     reverse(d);
-     reverse(d);
-     reverse(d);
-     */
-}
-
-void reverse(int d) {
-    digitalWrite(STEPB1, HIGH);
-    digitalWrite(STEPB2, LOW);
-    digitalWrite(STEPB3, LOW);
-    digitalWrite(STEPB4, HIGH);
-
-    rampAtoB(d);
-
-    digitalWrite(STEPB1, LOW);
-    digitalWrite(STEPB2, LOW);
-    digitalWrite(STEPB3, HIGH);
-    digitalWrite(STEPB4, HIGH);
-
-    rampBtoA(d);
-
-    digitalWrite(STEPB1, LOW);
-    digitalWrite(STEPB2, HIGH);
-    digitalWrite(STEPB3, HIGH);
-    digitalWrite(STEPB4, LOW);
-
-    rampAtoB(d);
-
-    digitalWrite(STEPB1, HIGH);
-    digitalWrite(STEPB2, HIGH);
-    digitalWrite(STEPB3, LOW);
-    digitalWrite(STEPB4, LOW);
-
-    rampBtoA(d);
-  
-}
-
-
-void forward(int d) {
-    digitalWrite(STEPB1, HIGH);
-    digitalWrite(STEPB2, HIGH);
-    digitalWrite(STEPB3, LOW);
-    digitalWrite(STEPB4, LOW);
-
-    //OCR2B = 255;
-    rampAtoB(d);
-
-    digitalWrite(STEPB1, LOW);
-    digitalWrite(STEPB2, HIGH);
-    digitalWrite(STEPB3, HIGH);
-    digitalWrite(STEPB4, LOW);
-
-    //OCR2A = 255;
-    rampBtoA(d);
-  
-    digitalWrite(STEPB1, LOW);
-    digitalWrite(STEPB2, LOW);
-    digitalWrite(STEPB3, HIGH);
-    digitalWrite(STEPB4, HIGH);
-
-    //OCR2B = 255;
-    rampAtoB(d);
-
-    digitalWrite(STEPB1, HIGH);
-    digitalWrite(STEPB2, LOW);
-    digitalWrite(STEPB3, LOW);
-    digitalWrite(STEPB4, HIGH);
-
-    //OCR2A = 255;
-    rampBtoA(d);
-}
-
-
-
-
-void rampUpA(int d) {
-    int i;
-    for (i=0; i<256; i++) {
-        OCR2A = i;
-        delay(d);
-    }
-}
-
-void rampDownA(int d) {
-    int i;
-    for (i=255; i>=0; i--) {
-        OCR2A = i;
-        delay(d);
-    }
-}
-
-void rampUpB(int d) {
-    int i;
-    for (i=0; i<256; i++) {
-        OCR2B = i;
-        delay(d);
-    }
-}
-
-void rampDownB(int d) {
-    int i;
-    for (i=255; i>=0; i--) {
-        OCR2B = i;
-        delay(d);
-    }
-}
-void loop__SQUARE() {
-
-    int d = 1;
-
-    digitalWrite(STEPB1, HIGH);
-    digitalWrite(STEPB2, HIGH);
-    digitalWrite(STEPB3, LOW);
-    digitalWrite(STEPB4, LOW);
-
-    OCR2B = 255;
-    rampUpA(d);
-    rampDownB(d);
-
-    digitalWrite(STEPB1, LOW);
-    digitalWrite(STEPB2, HIGH);
-    digitalWrite(STEPB3, HIGH);
-    digitalWrite(STEPB4, LOW);
-
-    OCR2A = 255;
-    rampUpB(d);
-    rampDownA(d);
-
-    digitalWrite(STEPB1, LOW);
-    digitalWrite(STEPB2, LOW);
-    digitalWrite(STEPB3, HIGH);
-    digitalWrite(STEPB4, HIGH);
-
-    OCR2B = 255;
-    rampUpA(d);
-    rampDownB(d);
-
-    digitalWrite(STEPB1, HIGH);
-    digitalWrite(STEPB2, LOW);
-    digitalWrite(STEPB3, LOW);
-    digitalWrite(STEPB4, HIGH);
-
-    OCR2A = 255;
-    rampUpB(d);
-    rampDownA(d);
-
-    delay(1000);
-
-}
