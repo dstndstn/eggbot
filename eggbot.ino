@@ -3,6 +3,20 @@
 #if defined(STANDALONE)
 #include "Arduino.h"
 #include "avr/io.h"
+
+// From https://github.com/arduino/Arduino/blob/2bfe164b9a5835e8cb6e194b928538a9093be333/hardware/arduino/avr/cores/arduino/main.cpp
+// Weak empty variant initialization function.
+// May be redefined by variant files.
+void initVariant() __attribute__((weak));
+void initVariant() { }
+
+int main() {
+  init();
+  initVariant();
+  setup();
+    for (;;)
+        loop();
+}
 #endif
 
 /* Hardware-wise, there are two stepper motors:
@@ -241,7 +255,8 @@ void loop() {
         }
     }
     lastis = is;
-  
+
+    /*
     if (doserial) {
         Serial.print("ic=");
         Serial.print(ic);
@@ -258,6 +273,7 @@ void loop() {
         Serial.println("");
         Serial.flush();
     }
+    */
     delay(d);
     theta += dtheta;
 }

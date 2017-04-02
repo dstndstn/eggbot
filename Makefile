@@ -33,7 +33,18 @@ CFLAGS := -O2 -DF_CPU=$(F_CPU) -I. -mmcu=$(MCU_TARGET) \
 	-I$(AVR_DIR)/ \
 	-DSTANDALONE=1
 
-ARDOBJS := wiring.o wiring_digital.o hooks.o WMath.o
+ARDOBJS := wiring.o wiring_digital.o wiring_analog.o hooks.o WMath.o
+
+wiring.c:
+	cp $(ARD_DIR)/cores/arduino/wiring.c $@
+wiring_digital.c:
+	cp $(ARD_DIR)/cores/arduino/wiring_digital.c $@
+wiring_analog.c:
+	cp $(ARD_DIR)/cores/arduino/wiring_analog.c $@
+hooks.c:
+	cp $(ARD_DIR)/cores/arduino/hooks.c $@
+WMath.cpp:
+	cp $(ARD_DIR)/cores/arduino/WMath.cpp $@
 
 eggbot.elf: eggbot.o $(ARDOBJS)
 	$(CC) $(CFLAGS) -Wl,-Map,$(MAP) -o $@ $^
