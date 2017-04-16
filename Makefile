@@ -77,7 +77,7 @@ reset:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 %.o: %.ino
-	$(CC) $(CFLAGS) -c -x c $< -o $@
+	$(CXX) $(CFLAGS) -c -x c++ $< -o $@
 
 %.o: %.cpp
 	$(CXX) $(CFLAGS) -c $< -o $@
