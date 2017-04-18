@@ -186,19 +186,40 @@ int isign(int i) {
     return 0;
 }
 
-
-class MotorB {
-public:
-    MotorB() :
-        lastic(0),
-        lastis(0),
-        theta(0)
-    {
+class Motor {
+  public:
+    Motor() :
+        x(0),
+        scale(1.0),
+        offset(0.0)
+        {}
+     
+    virtual void zero() {
+      offset = x;
     }
 
-    void step(float dtheta) {
-        theta += dtheta;
-        go_to(theta);
+    void step(float dx) {
+        x += dx;
+        go_to(x);
+    }
+
+    virtual void go_to(float thex) = 0;
+
+    float x;
+    float scale;
+    float offset;
+};
+
+
+class MotorB : public Motor {
+public:
+    MotorB() :
+      Motor(),
+      lastic(0),
+      lastis(0)
+      //step(0.01),
+      //delay(1),
+    {
     }
 
     float waveform(float phase) {
@@ -240,8 +261,9 @@ public:
       */
     }
     
-    void go_to(float t) {
-        theta = t;
+    virtual void go_to(float thex) {
+        x = thex;
+        float theta = (x - offset) * scale;
         //float s = sin(theta);
         //float c = cos(theta);
 
@@ -306,16 +328,64 @@ public:
         
     }
 
-    float theta;
+    //float theta;
+   // float x;
+    //float scale;
+    //float offset;
+    //float step;
+    //float delay;
 
 protected:
     int lastic;
     int lastis;
 };
 
+class MotorA : public Motor {
+public:
+    MotorA() :
+      Motor(),
+      last_theta(0),
+      theta_offset(0),
+      stepdelay(1)
+      {}
+
+    virtual void zero() {
+      Motor::zero();
+      theta_offset = last_theta;
+      last_theta = 0;
+    }
+
+    virtual void go_to(float thex) {
+        x = thex;
+        float theta = (x - offset) * scale;
+        int itheta = int(theta) - theta_offset;
+        int pause = 0;
+        // Step there -- at most one of these loops will run
+        for (; last_theta < itheta; last_theta++) {
+          if (pause)
+            delay(stepdelay);
+          motor_A_to(last_theta);
+          pause = 1;
+        }
+        for (; last_theta > itheta; last_theta--) {
+          if (pause)
+            delay(stepdelay);
+          motor_A_to(last_theta);
+          pause = 1;
+        }
+    }
+
+protected:
+    int last_theta;
+    int theta_offset;
+    float stepdelay;
+
+};
+
 MotorB mb;
 
-int ma = 0;
+MotorA ma;
+
 
 //float theta = M_PI;
 int d = 1;
@@ -342,70 +412,76 @@ void loop() {
         delay(d);
       }
     */
-    /*
-      for (int j=0; j<3; j++) {
-        digitalWrite(PEN_DOWN, HIGH);
-        delay(50);
-        digitalWrite(PEN_DOWN, LOW);
-
-        digitalWrite(PEN_UP, HIGH);
-        delay(80);
-        digitalWrite(PEN_UP, LOW);
-      }
-      digitalWrite(PEN_UP, HIGH);
-      delay(5000);
-      digitalWrite(PEN_UP, LOW);
-      digitalWrite(PEN_DOWN, HIGH);
-      delay(25);
-      digitalWrite(PEN_DOWN, LOW);
-      */
-
-     /*
       digitalWrite(PEN_UP, HIGH);
       delay(100);
+
+      float ds = 0.01;
       for (int i=0; i<5000; i++) {
-        mb.step(-dtheta);
+        mb.step(-ds);
         delay(d);
       }
       for (int i=0; i<1500; i++) {
-        mb.step(dtheta);
+        mb.step(ds);
         delay(d);
       }
+
+      for (int i=0; i<1000; i++) {
+        mb.step(-ds);
+        delay(d);
+      }
+      for (int i=0; i<2000; i++) {
+        mb.step(ds);
+        delay(d);
+      }
+      for (int i=0; i<1000; i++) {
+        mb.step(-ds);
+        delay(d);
+      }
+      
+      
+      /*
       digitalWrite(PEN_UP, LOW);
       delay(100);
       */
 
+      /*
       mb.theta = 0.;
       mb.go_to(0.);
       mb.theta = 0.;
       delay(1000);
+      */
+      mb.zero();
 
-      for (int i=0; i<800; i++) {
+      /*
+      for (int i=0; i<400; i++) {
         ma++;
         motor_A_to(ma);
-        delay(20 * d);
+        delay(d);
       }
+      */
 
+      ma.go_to(400);
 
       inited = 1;
   }
 
-  if ((dtheta > 0) && (mb.theta >= 2.*M_PI)) {
+  //if ((dtheta > 0) && (mb.theta >= 2.*M_PI)) {
+  if (mb.x >= 2.*M_PI) {
       //dtheta *= -1;
 
       mb.go_to(2.*M_PI);
       delay(100);
       
       for (int i=0; i<800; i++) {
-        ma++;
-        motor_A_to(ma);
-        delay(20 * d);
+        ma.step(1.);
+        delay(2 * d);
       }
       digitalWrite(PEN_UP, HIGH);    
       for (;;) {
          delay(1000);
       }
       
+      /*
       dtheta = -0.1;
 
       digitalWrite(PEN_UP, HIGH);
@@ -419,12 +495,12 @@ void loop() {
 
       digitalWrite(PEN_UP, LOW);
       delay(500);
-
+*/
   //}
   //if ((dtheta < 0) && (mb.theta < 0)) { //-3 * M_PI)) {
-      dtheta = DT;
-      mb.theta = 0.0 - dtheta;
-      mb.go_to(0.0);
+  //    dtheta = DT;
+  //    mb.theta = 0.0 - dtheta;
+  //    mb.go_to(0.0);
 
   //    digitalWrite(PEN_UP, LOW);
   //    delay(500);
@@ -435,10 +511,10 @@ void loop() {
   //if ((aa > 0) && (aa % 8 == 0)) {
       digitalWrite(PEN_UP, HIGH);
       delay(100);
+
       for (int i=0; i<5; i++) {
-        ma++;
-        motor_A_to(ma);
-        delay(20 * d);
+        ma.step(1);
+        delay(10 * d);
       }
       digitalWrite(PEN_UP, LOW);
       delay(100);
@@ -454,7 +530,7 @@ void loop() {
       }
       */
   //}
-  aa++;
+  //aa++;
 
   mb.step(dtheta);
   delay(10*d);
@@ -470,176 +546,10 @@ void loop() {
     }
 */
     
-    ma++;
-    motor_A_to(ma);
+    ma.step(1);
+    //ma++;
+    //motor_A_to(ma);
     delay(20 * d);
-}
-
-void loop1() {
-
-    /*if (!inited) {
-
-      for (int i=0; i<5000; i++) {
-        mb.step(dtheta);
-        delay(d);
-      }
-      for (int i=0; i<1500; i++) {
-        mb.step(-dtheta);
-        delay(d);
-      }
-      inited = 1;
-    }
-    delay(1000);
-    */
-
-    if ((dtheta > 0) && (mb.theta > 2.5 * M_PI)) {
-        dtheta *= -1;
-    }
-    if ((dtheta < 0) && (mb.theta < -3 * M_PI)) {
-        dtheta *= -1;
-    }
-
-    float t1 = mb.theta;
-
-    for (int i=0; i<10; i++) {
-      mb.step(dtheta);
-      delay(10*d);
-    }
-
-    float t2 = mb.theta;
-
-    if (((t1 > 0) && (t2 < 0)) ||
-        ((t1 < 0) && (t2 > 0))) {
-          for (int i=0; i<300; i++) {
-            mb.step(abs(dtheta));
-            delay(d);
-          }      
-          for (int i=0; i<600; i++) {
-            mb.step(-abs(dtheta));
-            delay(d);
-          }      
-          for (int i=0; i<300; i++) {
-            mb.step(abs(dtheta));
-            delay(d);
-          }
-      }      
-
-      if ( ((t1 < 2.*M_PI) && (t2 > 2.*M_PI)) ||
-           ((t1 > -2.*M_PI) && (t2 < -2.*M_PI)) ) {
-            
-        for (int i=0; i<300; i++) {
-          mb.step(-dtheta);
-          delay(d);
-        }      
-        for (int i=0; i<300; i++) {
-          mb.step(dtheta);
-          delay(d);
-        }      
-      }
-
-    
-    ma++;
-    motor_A_to(ma);
-    delay(5 * d);
-    ma++;
-    motor_A_to(ma);
-    delay(5 * d);
-    /* laser cal
-     if ((dtheta > 0) && (theta > 3.1416)) {
-     dtheta *= -1;
-     d = 2;
-     }
-     if ((dtheta < 0) && (theta < 0.)) {
-     dtheta *= -1;
-     theta = 0.;
-     d = 2000;
-     }
-     */
-
-    /*
-    if ((dtheta > 0) && (theta > M_PI * 10)) {
-        dtheta *= -1;
-    }
-    if ((dtheta < 0) && (theta < 0.)) {
-        dtheta *= -1;
-    }
-
-    //float t = remap_theta(theta);
-    float t = theta;
-    float s = sin(t);
-    float c = cos(t);
-
-    int ic = (int)(255 * c);
-    int is = (int)(255 * s);
-
-    int sgn;
-    sgn = isign(ic);
-    if (isign(lastic) != sgn) {
-        digitalWrite(MOTOR_B1_R, LOW);
-        digitalWrite(MOTOR_B1_F, LOW);
-    }
-    sgn = isign(is);
-    if (isign(lastis) != sgn) {
-        digitalWrite(MOTOR_B2_R, LOW);
-        digitalWrite(MOTOR_B2_F, LOW);
-    }
-
-    analogWrite(MOTOR_B2_EN, abs(is));
-    analogWrite(MOTOR_B1_EN, abs(ic));
-
-    // windings direction enable bits
-    sgn = isign(ic);
-    if (isign(lastic) != sgn) {
-        if (sgn == 0) {
-            digitalWrite(MOTOR_B1_R, LOW);
-            digitalWrite(MOTOR_B1_F, LOW);
-        } else if (sgn > 0) {
-            digitalWrite(MOTOR_B1_R, LOW);
-            digitalWrite(MOTOR_B1_F, HIGH);
-        } else {
-            digitalWrite(MOTOR_B1_F, LOW);
-            digitalWrite(MOTOR_B1_R, HIGH);
-        }
-    }
-    lastic = ic;
-
-    sgn = isign(is);
-    if (isign(lastis) != sgn) {
-        if (sgn == 0) {
-            digitalWrite(MOTOR_B2_R, LOW);
-            digitalWrite(MOTOR_B2_F, LOW);
-        } else if (sgn > 0) {
-            digitalWrite(MOTOR_B2_R, LOW);
-            digitalWrite(MOTOR_B2_F, HIGH);
-        } else {
-            digitalWrite(MOTOR_B2_F, LOW);
-            digitalWrite(MOTOR_B2_R, HIGH);
-        }
-    }
-    lastis = is;
-
-    delay(d);
-    theta += dtheta;
-     */
-
-    /*
-    if (doserial) {
-        Serial.print("ic=");
-        Serial.print(ic);
-        Serial.print(", is=");
-        Serial.print(is);
-        Serial.print("   winding 1: F=");
-        Serial.print(digitalRead(MOTOR_B1_F));
-        Serial.print(", R=");
-        Serial.print(digitalRead(MOTOR_B1_R));
-        Serial.print("   winding 2: F=");
-        Serial.print(digitalRead(MOTOR_B2_F));
-        Serial.print(", R=");
-        Serial.print(digitalRead(MOTOR_B2_R));
-        Serial.println("");
-        Serial.flush();
-    }
-    */
 }
 
 
