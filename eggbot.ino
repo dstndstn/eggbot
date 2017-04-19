@@ -415,29 +415,29 @@ void loop() {
       digitalWrite(PEN_UP, HIGH);
       delay(100);
 
-      float ds = 0.01;
-      for (int i=0; i<5000; i++) {
+      float ds = 0.02;
+      for (int i=0; i<2500; i++) {
         mb.step(-ds);
         delay(d);
       }
-      for (int i=0; i<1500; i++) {
+      for (int i=0; i<750; i++) {
         mb.step(ds);
         delay(d);
       }
-
+      for (int i=0; i<500; i++) {
+        mb.step(-ds);
+        delay(d);
+      }
+      for (int i=0; i<1000; i++) {
+        mb.step(ds);
+        delay(d);
+      }
+      /*
       for (int i=0; i<1000; i++) {
         mb.step(-ds);
         delay(d);
       }
-      for (int i=0; i<2000; i++) {
-        mb.step(ds);
-        delay(d);
-      }
-      for (int i=0; i<1000; i++) {
-        mb.step(-ds);
-        delay(d);
-      }
-      
+      */      
       
       /*
       digitalWrite(PEN_UP, LOW);
