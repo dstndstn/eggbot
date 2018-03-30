@@ -234,7 +234,6 @@ public:
           pause = 1;
         }
     }
-    float stepdelay;
 
     void pins_to(int i) {
       i = i % 8;
@@ -295,6 +294,7 @@ public:
 protected:
     int last_theta;
     int theta_offset;
+    float stepdelay;
 
     int pin1;
     int pin2;
@@ -360,9 +360,6 @@ public:
         analogWrite(enable1, abs(ic));
         analogWrite(enable2, abs(is));
 
-        //digitalWrite(enable1, (ic > 0));
-        //digitalWrite(enable2, (is > 0));
-
         // windings direction enable bits
         sgn = isign(ic);
         if (isign(lastic) != sgn) {
@@ -393,7 +390,6 @@ public:
             }
         }
         lastis = is;
-        
     }
 
 protected:
@@ -414,13 +410,6 @@ MotorB mb(MOTOR_B1_EN, MOTOR_B1_F, MOTOR_B1_R,
 
 MotorA ma(MOTOR_A_1, MOTOR_A_2, MOTOR_A_3, MOTOR_A_4);
 
-int N = 0;
-
-float da = 0.1;
-float db = -0.12;
-
-int d = 1;
-
 // motor B: ~240 across the width of the egg
 // motor A:  400 steps around the egg
 
@@ -432,6 +421,10 @@ int d = 1;
 void loop() {
   /**
    * We implement just enough of the EggBot serial interface to integrate with Inkscape.
+   * 
+   * Had to make some changes to the way it detects the USB port, so need a modified driver:
+   * (forked from https://github.com/evil-mad/plotink)
+   *   cp ebb_serial.py /Applications/Inkscape.app/Contents/Resources/share/inkscape/extensions/
    * 
    * Conveniently, you can also use the Arduino Serial Monitor window to test it.
    */
