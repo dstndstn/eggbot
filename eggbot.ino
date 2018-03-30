@@ -2,7 +2,6 @@
 
 #include "Arduino.h"
 
-
 #if defined(STANDALONE)
 #include "Arduino.h"
 #include "avr/io.h"
@@ -43,35 +42,29 @@ int main() {
 
  Pins:
 
- Motor A:
- * 2 -> A1
- * 4 -> A2
- * 5 -> A3
- * 6 -> A4
-
  Motor B:
  * 11 -> M1 enable
- *  3 -> M2 enable
- *
- * 7 -> M2 reverse
- * 8 -> M1 forward
- * 9 -> M2 forward
- * 10-> M1 reverse
+ * 2  -> M1 forward
+ * 4  -> M1 reverse
+ * 3  -> M2 enable
+ * 5  -> M2 forward
+ * 6  -> M2 reverse
  */
 
-#define MOTOR_A_1 2
-#define MOTOR_A_2 4
-#define MOTOR_A_3 5
-#define MOTOR_A_4 6
-
-#define MOTOR_B2_R 7
-#define MOTOR_B1_F 8
-#define MOTOR_B2_F 9
-#define MOTOR_B1_R 10
+#define MOTOR_A_1 7
+#define MOTOR_A_2 8
+#define MOTOR_A_3 9
+#define MOTOR_A_4 10
 
 #define MOTOR_B1_EN 11
-#define MOTOR_B2_EN  3
+#define MOTOR_B1_F  2
+#define MOTOR_B1_R  4
+#define MOTOR_B2_EN 3
+#define MOTOR_B2_F  5
+#define MOTOR_B2_R  6
 
+#define PEN_UP 12
+#define PEN_DOWN 13
 
 /**
  * PWM:
@@ -97,34 +90,7 @@ int main() {
  * 
  */
 
-#define STEPB1 7
-#define STEPB2 8
-#define STEPB3 9
-#define STEPB4 10
-
-#define PWMB1 3
-#define PWMB2 11
-
-#define PEN_UP   13
-#define PEN_DOWN 12
-
 void setup() {
-    pinMode(PEN_UP,   OUTPUT);
-    pinMode(PEN_DOWN, OUTPUT);
-
-    digitalWrite(PEN_UP,   LOW);
-    digitalWrite(PEN_DOWN, LOW);
-
-    pinMode(MOTOR_A_1, OUTPUT);
-    pinMode(MOTOR_A_2, OUTPUT);
-    pinMode(MOTOR_A_3, OUTPUT);
-    pinMode(MOTOR_A_4, OUTPUT);
-
-    digitalWrite(MOTOR_A_1, LOW);
-    digitalWrite(MOTOR_A_2, LOW);
-    digitalWrite(MOTOR_A_3, LOW);
-    digitalWrite(MOTOR_A_4, LOW);
-
     pinMode(MOTOR_B1_EN, OUTPUT);
     pinMode(MOTOR_B1_F,  OUTPUT);
     pinMode(MOTOR_B1_R,  OUTPUT);
@@ -136,12 +102,30 @@ void setup() {
     digitalWrite(MOTOR_B1_R, LOW);
     digitalWrite(MOTOR_B2_F, LOW);
     digitalWrite(MOTOR_B2_R, LOW);
+    digitalWrite(MOTOR_B1_EN, LOW);
+    digitalWrite(MOTOR_B2_EN, LOW);
 
+    pinMode(MOTOR_A_1, OUTPUT);
+    pinMode(MOTOR_A_2, OUTPUT);
+    pinMode(MOTOR_A_3, OUTPUT);
+    pinMode(MOTOR_A_4, OUTPUT);
+
+    digitalWrite(MOTOR_A_1, LOW);
+    digitalWrite(MOTOR_A_2, LOW);
+    digitalWrite(MOTOR_A_3, LOW);
+    digitalWrite(MOTOR_A_4, LOW);
+
+    pinMode(PEN_UP,  OUTPUT);
+    digitalWrite(PEN_UP, LOW);
+    pinMode(PEN_DOWN,  OUTPUT);
+    digitalWrite(PEN_DOWN, LOW);
+
+    if (1) {
     // Timer 2: WMG2 = 0x3 (fast PWM), COM2[AB] = 0x2 (non-inverting PWM)
-    //TCCR2A = _BV(COM2A1) | _BV(COM2B1) | _BV(WGM21) | _BV(WGM20);
+    TCCR2A = _BV(COM2A1) | _BV(COM2B1) | _BV(WGM21) | _BV(WGM20);
 
     // Timer 2: WMG2 = 0x1 (phase correct PWM), COM2[AB] = 0x2 (non-inverting PWM)
-    TCCR2A = _BV(COM2A1) | _BV(COM2B1) | _BV(WGM20);
+    //TCCR2A = _BV(COM2A1) | _BV(COM2B1) | _BV(WGM20);
 
     // Timer 2: prescaler = 1 (CS2 = 0x1)
     TCCR2B = _BV(CS20);
@@ -149,7 +133,7 @@ void setup() {
     // For a while I thought the PWM was too fast for the motor driver.
     // Slow values can result in audible drive signals to the motor!
     // Timer 2: prescaler = 8 (CS22=0, CS21=1, CS20=0)
-    // TCCR2B = _BV(CS21);
+    //TCCR2B = _BV(CS21);
     // Timer 2: prescaler = 32
     // TCCR2B = _BV(CS21) | _BV(CS20);
     // Timer 2: prescaler = 256
@@ -161,22 +145,13 @@ void setup() {
 
     OCR2A = 0;
     OCR2B = 0;
+    }
 
     Serial.begin(9600);
+    while (!Serial) {
+      ; // wait for serial port to connect. Needed for native USB port only
+    }
 }
-
-/*
-float remap_theta(float t0) {
-    float t = fmod(t0, M_PI/2.);
-    if (t < 0.)
-        t += M_PI/2.;
-    const float knee = 0.471;
-    const float off  = 0.653;
-    const float a = 0.883;
-    float dy = t - off;
-    return t0 - t + knee + (dy >= 0 ? 1 : -1) * pow(abs(dy)/a, 2.5);
-}
- */
 
 int isign(int i) {
     if (i > 0)
@@ -211,136 +186,17 @@ class Motor {
     float offset;
 };
 
-
-class MotorB : public Motor {
-public:
-    MotorB() :
-      Motor(),
-      lastic(0),
-      lastis(0)
-      //step(0.01),
-      //delay(1),
-    {
-    }
-
-    float waveform(float phase) {
-      // cos-like.
-      phase = fmod(phase, 2.*M_PI);
-      if (phase < 0)
-        phase += 2.*M_PI;
-      // remap to 0 to 4.
-      phase *= 4. / (2.*M_PI);
-
-      // triangle wave
-      if (phase < 2)
-        return 1 - phase;
-      return (phase-2) - 1;
-
-      /*
-      float xx[] = { 0., 0.4, 0.8,  1.2,  1.6,  2.0 };
-      float yy[] = { 1., 0.6, 0.4, -0.4, -0.6, -1.0 };
-
-      for (int i=0; i<(sizeof(xx)/sizeof(float))-1; i++) {
-        if ((phase >= xx[i]) && (phase <= xx[i+1])) {
-          float dd = (yy[i+1] - yy[i]) / (xx[i+1] - xx[i]);
-          return yy[i] + (phase - xx[i]) * dd;
-        }
-      }
-
-      // triangle wave
-      if (phase < 2) {
-        if (phase < 0.5) {
-          return (1 - phase*1.5);
-        }
-        if (phase < 1.5) {
-          return (1 - (0.5*1.5) - (phase - 0.5)*0.5);
-        }
-        return (-0.25 - (phase - 1.5)*1.5);
-        //return 1 - phase;
-      }
-      return (phase-2) - 1;
-      */
-    }
-    
-    virtual void go_to(float thex) {
-        x = thex;
-        float theta = (x - offset) * scale;
-        //float s = sin(theta);
-        //float c = cos(theta);
-
-        float c = waveform(theta);
-        float s = waveform(theta + 1.5*M_PI);
-
-        //s = (s > 0 ? s*s : -s*s);
-        //c = (c > 0 ? c*c : -c*c);
-        //s = (s > 0 ? sqrt(s) : -sqrt(-s));
-        //c = (c > 0 ? sqrt(c) : -sqrt(-c));
-
-        int ic = (int)(255 * c);
-        int is = (int)(255 * s);
-        int sgn;
-        sgn = isign(ic);
-        // If we're flipping signs (powering up the other winding),
-        // turn both directions off first.
-        if (isign(lastic) != sgn) {
-            digitalWrite(MOTOR_B1_R, LOW);
-            digitalWrite(MOTOR_B1_F, LOW);
-        }
-        sgn = isign(is);
-        if (isign(lastis) != sgn) {
-            digitalWrite(MOTOR_B2_R, LOW);
-            digitalWrite(MOTOR_B2_F, LOW);
-        }
-
-        // Now set PWM
-        analogWrite(MOTOR_B2_EN, abs(is));
-        analogWrite(MOTOR_B1_EN, abs(ic));
-
-        // windings direction enable bits
-        sgn = isign(ic);
-        if (isign(lastic) != sgn) {
-            if (sgn == 0) {
-                digitalWrite(MOTOR_B1_R, LOW);
-                digitalWrite(MOTOR_B1_F, LOW);
-            } else if (sgn > 0) {
-                digitalWrite(MOTOR_B1_R, LOW);
-                digitalWrite(MOTOR_B1_F, HIGH);
-            } else {
-                digitalWrite(MOTOR_B1_F, LOW);
-                digitalWrite(MOTOR_B1_R, HIGH);
-            }
-        }
-        lastic = ic;
-
-        sgn = isign(is);
-        if (isign(lastis) != sgn) {
-            if (sgn == 0) {
-                digitalWrite(MOTOR_B2_R, LOW);
-                digitalWrite(MOTOR_B2_F, LOW);
-            } else if (sgn > 0) {
-                digitalWrite(MOTOR_B2_R, LOW);
-                digitalWrite(MOTOR_B2_F, HIGH);
-            } else {
-                digitalWrite(MOTOR_B2_F, LOW);
-                digitalWrite(MOTOR_B2_R, HIGH);
-            }
-        }
-        lastis = is;
-        
-    }
-
-protected:
-    int lastic;
-    int lastis;
-};
-
 class MotorA : public Motor {
 public:
-    MotorA() :
+    MotorA(int p1, int p2, int p3, int p4) :
       Motor(),
       last_theta(0),
       theta_offset(0),
-      stepdelay(1)
+      stepdelay(1),
+      pin1(p1),
+      pin2(p2),
+      pin3(p3),
+      pin4(p4)
       {}
 
     virtual void zero() {
@@ -358,361 +214,546 @@ public:
         for (; last_theta < itheta; last_theta++) {
           if (pause)
             delay(stepdelay);
-          motor_A_to(last_theta);
+          pins_to(last_theta);
           pause = 1;
         }
         for (; last_theta > itheta; last_theta--) {
           if (pause)
             delay(stepdelay);
-          motor_A_to(last_theta);
+          pins_to(last_theta);
           pause = 1;
         }
     }
     float stepdelay;
 
+    void pins_to(int i) {
+      i = i % 8;
+        if (i < 0)
+          i += 8;
+      switch (i) {
+      case 0:
+        digitalWrite(pin1, HIGH);
+        digitalWrite(pin2,  LOW);
+        digitalWrite(pin3,  LOW);
+        digitalWrite(pin4,  LOW);
+        break;
+      case 1:
+        digitalWrite(pin1, HIGH);
+        digitalWrite(pin2, HIGH);
+        digitalWrite(pin3,  LOW);
+        digitalWrite(pin4,  LOW);
+        break;
+      case 2:
+        digitalWrite(pin1,  LOW);
+        digitalWrite(pin2, HIGH);
+        digitalWrite(pin3,  LOW);
+        digitalWrite(pin4,  LOW);
+        break;
+      case 3:
+        digitalWrite(pin1,  LOW);
+        digitalWrite(pin2, HIGH);
+        digitalWrite(pin3, HIGH);
+        digitalWrite(pin4,  LOW);
+        break;
+      case 4:
+        digitalWrite(pin1,  LOW);
+        digitalWrite(pin2,  LOW);
+        digitalWrite(pin3, HIGH);
+        digitalWrite(pin4,  LOW);
+        break;
+      case 5:
+        digitalWrite(pin1,  LOW);
+        digitalWrite(pin2,  LOW);
+        digitalWrite(pin3, HIGH);
+        digitalWrite(pin4, HIGH);
+        break;
+      case 6:
+        digitalWrite(pin1,  LOW);
+        digitalWrite(pin2,  LOW);
+        digitalWrite(pin3,  LOW);
+        digitalWrite(pin4, HIGH);
+        break;
+      case 7:
+        digitalWrite(pin1, HIGH);
+        digitalWrite(pin2,  LOW);
+        digitalWrite(pin3,  LOW);
+        digitalWrite(pin4, HIGH);
+        break;
+      }
+    }
+
 protected:
     int last_theta;
     int theta_offset;
 
+    int pin1;
+    int pin2;
+    int pin3;
+    int pin4;
+
 };
 
 
-
-MotorB mb;
-MotorA ma;
-
-
-class Pen {
-  public:
-  Pen() :
-  x(0),
-  y(0),
-  step(0.2),
-  pause(2)
-  {}
-
-  void zero() {
-    ma.zero();
-    mb.zero();
-    x = y = 0;
-  }
-
-  void go_to(float new_x, float new_y) {
-    float dx = (new_x - x);
-    float dy = (new_y - y);
-    float dist = sqrt(dx*dx + dy*dy);
-    int nsteps = ceil(dist / step);
-    float sx = step * dx / dist;
-    float sy = step * dy / dist;
-    // all but last step -- full step size.
-    for (int i=0; i<nsteps-1; i++) {
-      ma.step(sy);
-      mb.step(sx);
-      x += sx;
-      y += sy;
-      delay(pause);
+class MotorB : public Motor {
+public:
+    MotorB(int en1, int f1, int r1, int en2, int f2, int r2) :
+      Motor(),
+      lastic(0),
+      lastis(0),
+      enable1(en1),
+      forward1(f1),
+      reverse1(r1),
+      enable2(en2),
+      forward2(f2),
+      reverse2(r2)
+    {
     }
-    // last step -- go there!
-    ma.step(new_x - x);
-    mb.step(new_y - y);
-  }
 
-  void pen_up() {
-      digitalWrite(PEN_UP, HIGH);
-      delay(100);
-  }
+    float waveform(float phase) {
+      // cos-like.
+      phase = fmod(phase, 2.*M_PI);
+      if (phase < 0)
+        phase += 2.*M_PI;
+      // remap to 0 to 4.
+      phase *= 4. / (2.*M_PI);
 
-  void pen_down() {
-      digitalWrite(PEN_UP, LOW);
-      delay(100);
-  }
-  
-  float x;
-  float y;
-  float step;
-  float pause;
-  
+      // triangle wave
+      if (phase < 2)
+        return 1 - phase;
+      return (phase-2) - 1;
+    }
+
+    virtual void go_to(float thex) {
+        x = thex;
+        float theta = (x - offset) * scale;
+
+        float c = waveform(theta);
+        float s = waveform(theta + 1.5*M_PI);
+
+        int ic = (int)(255 * c);
+        int is = (int)(255 * s);
+        int sgn;
+        sgn = isign(ic);
+        // If we're flipping signs (powering up the other winding),
+        // turn both directions off first.
+        if (isign(lastic) != sgn) {
+            digitalWrite(forward1, LOW);
+            digitalWrite(reverse1, LOW);
+        }
+        sgn = isign(is);
+        if (isign(lastis) != sgn) {
+            digitalWrite(forward2, LOW);
+            digitalWrite(reverse2, LOW);
+        }
+
+        // Now set PWM
+        analogWrite(enable1, abs(ic));
+        analogWrite(enable2, abs(is));
+
+        //digitalWrite(enable1, (ic > 0));
+        //digitalWrite(enable2, (is > 0));
+
+        // windings direction enable bits
+        sgn = isign(ic);
+        if (isign(lastic) != sgn) {
+            if (sgn == 0) {
+                digitalWrite(forward1, LOW);
+                digitalWrite(reverse1, LOW);
+            } else if (sgn > 0) {
+                digitalWrite(reverse1, LOW);
+                digitalWrite(forward1, HIGH);
+            } else {
+                digitalWrite(forward1, LOW);
+                digitalWrite(reverse1, HIGH);
+            }
+        }
+        lastic = ic;
+
+        sgn = isign(is);
+        if (isign(lastis) != sgn) {
+            if (sgn == 0) {
+                digitalWrite(forward2, LOW);
+                digitalWrite(reverse2, LOW);
+            } else if (sgn > 0) {
+                digitalWrite(reverse2, LOW);
+                digitalWrite(forward2, HIGH);
+            } else {
+                digitalWrite(forward2, LOW);
+                digitalWrite(reverse2, HIGH);
+            }
+        }
+        lastis = is;
+        
+    }
+
+protected:
+    int lastic;
+    int lastis;
+
+    int enable1;
+    int forward1;
+    int reverse1;
+    int enable2;
+    int forward2;
+    int reverse2;
 };
 
-Pen pen;
+#if 0
+class MotorB : public Motor {
+public:
+    MotorB(int en1, int f1, int r1, int en2, int f2, int r2) :
+      Motor(),
+      lastx(0),
+      enable1(en1),
+      forward1(f1),
+      reverse1(r1),
+      enable2(en2),
+      forward2(f2),
+      reverse2(r2)
+    {
+    }
+
+    virtual void go_to(float thex) {
+        x = thex;
+
+        int ix = (int)x;
+        if (ix == lastx)
+          return;
+
+        ix = ix % 4;
+        if (ix < 0)
+          ix += 4;
+        lastx = ix;
+        
+        digitalWrite(enable1,  LOW);
+        digitalWrite(forward1, LOW);
+        digitalWrite(reverse1, LOW);
+        digitalWrite(enable2,  LOW);
+        digitalWrite(forward2, LOW);
+        digitalWrite(reverse2, LOW);
+
+        switch (ix) {
+          case 0:
+            digitalWrite(forward1, HIGH);
+            digitalWrite(enable1,  HIGH);
+            break;
+          case 1:
+            digitalWrite(forward2, HIGH);
+            digitalWrite(enable2,  HIGH);
+            break;
+          case 2:
+            digitalWrite(reverse1, HIGH);
+            digitalWrite(enable1,  HIGH);
+            break;
+          case 3:
+            digitalWrite(reverse2, HIGH);
+            digitalWrite(enable2,  HIGH);
+            break;
+        }
+    }
+
+protected:
+    int lastx;
+    
+    int enable1;
+    int forward1;
+    int reverse1;
+    int enable2;
+    int forward2;
+    int reverse2;
+};
+#endif
+
+
+MotorB mb(MOTOR_B1_EN, MOTOR_B1_F, MOTOR_B1_R,
+          MOTOR_B2_EN, MOTOR_B2_F, MOTOR_B2_R);
+
+MotorA ma(MOTOR_A_1, MOTOR_A_2, MOTOR_A_3, MOTOR_A_4);
+
+int N = 0;
+
+float da = 0.1;
+float db = -0.12;
 
 int d = 1;
-float theta = 0;
-float DT = 2.*M_PI / 256.0;
-float dtheta = DT;
 
-int inited = 0;
+// motor B: ~240 across the width of the egg
+// motor A:  400 steps around the egg
 
-float r = 0;
-float dr = 2.*M_PI / 80;
 
-int aa = 0;
+// inkscape interface;
+// 9600 baud
+// v\r -> EBBx
+// http://evil-mad.github.io/EggBot/ebb.html
 
 void loop() {
+  char linebuffer[32];
+  if (Serial.available() > 0) {
+    int nr = Serial.readBytesUntil('\r', linebuffer, sizeof(linebuffer)-1);
+    linebuffer[nr] = '\0';
+    if (nr == 0)
+      return;
+    String line(linebuffer);
+    line.toUpperCase();
+    if (line.startsWith("V") || line.startsWith("v")) {
+      String reply = String("EBB LANG1 ") + line + String("\r\n");
+      Serial.write(reply.c_str());
+      //Serial.write("EBB LANG1 " + line + "\r\n");
+    } else if (line.startsWith("QB")) {
+      Serial.write("0\r\nOK\r\n");
+    } else if (line.startsWith("SC,4,") || // pen up limit
+               line.startsWith("SC,5,") || // pen down limit
+               line.startsWith("SC,11,") || // pen up speed
+               line.startsWith("SC,12,") || // pen down speed
+               line.startsWith("EM,1,1")    // enable motor 1
+               ) {
+      // Pen up/down servo positions
+      Serial.write("OK\r\n");
+    } else if (line.startsWith("SP,")) {
+       line = line.substring(3);
+       if (line.startsWith("1")) {
+          digitalWrite(PEN_UP, HIGH);
+          delay(500);
+       } else if (line.startsWith("0")) {
+          //digitalWrite(PEN_UP, LOW);
+          // in 10 steps of 50 ms each, bit-bang the PEN_UP motor from all-on to all-off.
+          for (int i=0; i<10; i++) {
+            for (int j=0; j<5; j++) {
+              digitalWrite(PEN_UP, HIGH);
+              delay(10-i);
+              digitalWrite(PEN_UP, LOW);
+              delay(i);
+            }
+          }
+          delay(500);
+          digitalWrite(PEN_DOWN, HIGH);
+          delay(500);
+          digitalWrite(PEN_DOWN, LOW);
+       }
+      Serial.write("OK\r\n");
+    } else if (line.startsWith("SM,")) {
+       line = line.substring(3);
+       int comma = line.indexOf(',');
+       String ss = line.substring(0, comma);
+       long dur = ss.toInt();
+       line = line.substring(comma+1);
+       comma = line.indexOf(',');
+       float axis1, axis2;
+       if (comma == -1) {
+         axis2 = 0.0;
+         axis1 = line.toFloat();
+       } else {
+         ss = line.substring(0, comma);
+         axis1 = ss.toFloat();
+         line = line.substring(comma+1);
+         axis2 = line.toFloat();
+       }
 
-  if (!inited) {
+      float scalea = 0.125;
+      float scaleb = 0.208;
+       
+       axis1 /= dur;
+       axis2 /= dur;
+       while (dur > 0) {
+         mb.step(axis1 * scaleb);
+         ma.step(axis2 * scalea);
+         dur--;
+         delay(1);
+       }
+      Serial.write("OK\r\n");
+       
+    }
+    // SM,3297,-122,1313
+  }
+}
+
+void loopNothing() {
+  int i;
+  int j;
+  int k;
+  for (j=0; j<24; j++) {
+    if (j % 2 == 1) {
+      digitalWrite(PEN_UP, HIGH);
+      delay(500);
+      for (k=0; k<100; k++) {
+        mb.step(-0.1);
+        delay(d);
+      }
+      digitalWrite(PEN_UP, LOW);
+      delay(500);
+      continue;
+    }
+
+    for (k=0; k<10; k++) {
+      /*
+      for (i=0; i<4000; i++) {
+        ma.step(da);
+        delay(d);
+      }
+      */
+      for (i=0; i<800; i++) {
+        ma.step(0.5);
+
+        mb.step(-1./800);
+
+        delay(d);
+      }
+      //mb.step(-1.);
+    }
+  }
+}
+
+#if 0
+int starting = 1;
+void loop() {
+  if (starting == 1) {
       digitalWrite(PEN_UP, HIGH);
       delay(100);
-
-      float ds = 0.04;
-      for (int i=0; i<1250; i++) {
-        mb.step(-ds);
-        delay(d);
-      }
-      /*
-      for (int i=0; i<750; i++) {
-        mb.step(ds);
-        delay(d);
-      }
-      for (int i=0; i<500; i++) {
-        mb.step(-ds);
-        delay(d);
-      }
-      for (int i=0; i<1000; i++) {
-        mb.step(ds);
-        delay(d);
-      }
-      */
-      for (int i=0; i<625; i++) {
-        mb.step(ds);
-        delay(d);
-      }
-      // about 20. in total sweep.
-      
-      mb.zero();
-      mb.scale = -0.1;
-
-      /*
-      for (int i=0; i<200; i++) {
-        mb.step(1.);
-        delay(10);
-      }
-      for (int i=0; i<200; i++) {
-        mb.step(-1.);
-        delay(10);
-      }
-      */
-
-      ma.stepdelay = 2;
-      ma.go_to(400);
-      ma.stepdelay = 1;
-      ma.zero();
-      ma.scale = 0.5;
-      inited = 1;
-
-      ma.scale *= 0.4;
-      mb.scale *= 0.4;
-
-      pen.go_to( 0, 0);
-      pen.pen_down();
-
-      Serial.print("eggbot> ");
-      Serial.flush();
+      starting = 2;
   }
+  if (starting == 2) {
+    mb.step(db);
+    N += 1;
+    if (N == 1000) {
+      starting = 3;
+      N = 0;
 
-  if (Serial.available() == 0) {
-    delay(1);
-    return;
+      digitalWrite(PEN_UP, LOW);
+      delay(100);
+    }
   }
-
-  char cmd[32];
-  memset(cmd, 0, 32);
-  int i;
-  for (i=0; i<32-1; i++) {
-    int r = Serial.read();
-    if (r == -1)
-      return;
-
-    Serial.print("read: ");
-    Serial.println((char)r);
-    Serial.flush();
-
-    if (r == ' ')
-      break;
-    if (r == '\n')
-      break;
-    cmd[i] = r;
+  if (starting == 3) {
+    ma.step(da);
+    N += 1;
+    if (N == 4000) {
+      starting = 4;
+      N = 0;
+    }
   }
-  float ydir = 0;
-  float xdir = 0;
-  Serial.print("cmd: '");
-  Serial.print((const char*)cmd);
-  Serial.println("'");
-  if (strcmp(cmd, "up") == 0) {
-    Serial.println("up ");
-    ydir = 1;   
-  } else if (strcmp(cmd, "down") == 0) {
-    Serial.println("down ");
-    ydir = -1;
-  } else if (strcmp(cmd, "left") == 0) {
-    Serial.println("left ");
-    xdir = -1;
-  } else if (strcmp(cmd, "right") == 0) {
-    Serial.println("right ");
-    xdir = 1;
-  } else if (strcmp(cmd, "penup") == 0) {
-    Serial.println("pen up ");
-    pen.pen_up();
-    return;
-  } else if (strcmp(cmd, "pendown") == 0) {
-    Serial.println("pen down ");
-    pen.pen_down();
-    return;
-  } else {
-    Serial.print("unknown command '");
-    Serial.print(cmd);
-    Serial.println("'");
-    return;
-  }
-  float dist = 0;
-  if ((xdir != 0) || (ydir != 0)) {
-    dist = Serial.parseFloat();
-  }
-  if (dist != 0) {
-    Serial.println(dist);
-    pen.go_to(pen.x + xdir * dist, pen.y + ydir * dist);
-  }
-  while (1) {
-     int r = Serial.read();
-    Serial.print("read ");
-    Serial.println(r);
-    Serial.flush();
-     if (r == '\n')
-       return;
-  }
-
-  /*
-  // V
-  pen.go_to(50, -100);
-  pen.go_to(100, 0);
-
-  // I
-  pen.pen_up();
-  pen.go_to(125, 0);
-  pen.pen_down();
-  pen.go_to(125, -100);
-
-  // V
-  pen.pen_up();
-  pen.go_to(150, 0);
-  pen.pen_down();
-  pen.go_to(200, -100);
-  pen.go_to(250,  0);
-  pen.pen_up();
-
-  // I
-  pen.go_to(275, 0);
-  pen.pen_down();
-  pen.go_to(275, -100);
-  pen.pen_up();
-
-  // J
-  pen.go_to(50, 200);
-  pen.pen_down();
-  pen.go_to(50, 100);
-  pen.go_to(0,  100);
-  pen.go_to(0,  150);
-  pen.pen_up();
-
-  pen.go_to(0, 400);
-  pen.zero();
-  */
-  
-  /*
-  pen.go_to(  0,   0);
-  pen.go_to(100,   0);
-  pen.go_to(100, 100);
-  pen.go_to(  0, 100);
-  pen.go_to(  0,   0);
-  */
+  delay(d);
+}
+#endif
 
 /*
-  if (mb.x >= 2.*M_PI) {
-      mb.go_to(2.*M_PI);
-      delay(100);
-      for (int i=0; i<800; i++) {
-        ma.step(1.);
-        delay(2 * d);
-      }
-      digitalWrite(PEN_UP, HIGH);    
-      for (;;) {
-         delay(1000);
-      }
-  }
+void loop() {
 
+  if (N > 2000) {
+      db *= -1;
+      digitalWrite(PEN_UP, HIGH);
+      delay(2000);
+      digitalWrite(PEN_UP, LOW);
       
-    digitalWrite(PEN_UP, HIGH);
-    delay(100);
-    for (int i=0; i<5; i++) {
-        ma.step(1);
-        delay(10 * d);
-    }
-    digitalWrite(PEN_UP, LOW);
-    delay(100);
-
-    mb.step(dtheta);
-    delay(10*d);
-
-    ma.step(1);
-    delay(20 * d);
-    */
-}
-
-
-void motor_A_to(int i) {
-  i = i % 8;
-  if (i < 0)
-    i += 8;
-  switch (i) {
-    case 0:
-      digitalWrite(MOTOR_A_1, HIGH);
-      digitalWrite(MOTOR_A_2,  LOW);
-      digitalWrite(MOTOR_A_3,  LOW);
-      digitalWrite(MOTOR_A_4,  LOW);
-      break;
-    case 1:
-      digitalWrite(MOTOR_A_1, HIGH);
-      digitalWrite(MOTOR_A_2, HIGH);
-      digitalWrite(MOTOR_A_3,  LOW);
-      digitalWrite(MOTOR_A_4,  LOW);
-      break;
-    case 2:
-      digitalWrite(MOTOR_A_1,  LOW);
-      digitalWrite(MOTOR_A_2, HIGH);
-      digitalWrite(MOTOR_A_3,  LOW);
-      digitalWrite(MOTOR_A_4,  LOW);
-      break;
-    case 3:
-      digitalWrite(MOTOR_A_1,  LOW);
-      digitalWrite(MOTOR_A_2, HIGH);
-      digitalWrite(MOTOR_A_3, HIGH);
-      digitalWrite(MOTOR_A_4,  LOW);
-      break;
-    case 4:
-      digitalWrite(MOTOR_A_1,  LOW);
-      digitalWrite(MOTOR_A_2,  LOW);
-      digitalWrite(MOTOR_A_3, HIGH);
-      digitalWrite(MOTOR_A_4,  LOW);
-      break;
-    case 5:
-      digitalWrite(MOTOR_A_1,  LOW);
-      digitalWrite(MOTOR_A_2,  LOW);
-      digitalWrite(MOTOR_A_3, HIGH);
-      digitalWrite(MOTOR_A_4, HIGH);
-      break;
-    case 6:
-      digitalWrite(MOTOR_A_1,  LOW);
-      digitalWrite(MOTOR_A_2,  LOW);
-      digitalWrite(MOTOR_A_3,  LOW);
-      digitalWrite(MOTOR_A_4, HIGH);
-      break;
-    case 7:
-      digitalWrite(MOTOR_A_1, HIGH);
-      digitalWrite(MOTOR_A_2,  LOW);
-      digitalWrite(MOTOR_A_3,  LOW);
-      digitalWrite(MOTOR_A_4, HIGH);
-      break;
+      N = 0;
   }
+  mb.step(db);
+  ma.step(da);
+
+  delay(d);
+  N += 1;
 }
+*/
+
+#if 0
+/*
+  digitalWrite(MOTOR_B1_F,  HIGH);
+  digitalWrite(MOTOR_B1_EN, HIGH);
+  delay(d);
+  digitalWrite(MOTOR_B1_EN, LOW);
+  digitalWrite(MOTOR_B1_F,  LOW);
+
+  digitalWrite(MOTOR_B2_F,  HIGH);
+  digitalWrite(MOTOR_B2_EN, HIGH);
+  delay(d);
+  digitalWrite(MOTOR_B2_EN, LOW);
+  digitalWrite(MOTOR_B2_F,  LOW);
+
+  digitalWrite(MOTOR_B1_R,  HIGH);
+  digitalWrite(MOTOR_B1_EN, HIGH);
+  delay(d);
+  digitalWrite(MOTOR_B1_EN, LOW);
+  digitalWrite(MOTOR_B1_R,  LOW);
+
+  digitalWrite(MOTOR_B2_R,  HIGH);
+  digitalWrite(MOTOR_B2_EN, HIGH);
+  delay(d);
+  digitalWrite(MOTOR_B2_EN, LOW);
+  digitalWrite(MOTOR_B2_R,  LOW);
+*/
+  if ((N % 80) < 40) {
+
+  digitalWrite(MOTOR_B1_F,  HIGH);
+  digitalWrite(MOTOR_B1_EN, HIGH);
+  delay(d);
+
+  digitalWrite(MOTOR_B2_F,  HIGH);
+  digitalWrite(MOTOR_B2_EN, HIGH);
+  delay(d);
+  
+  digitalWrite(MOTOR_B1_EN, LOW);
+  digitalWrite(MOTOR_B1_F,  LOW);
+  delay(d);
+
+  digitalWrite(MOTOR_B1_R,  HIGH);
+  digitalWrite(MOTOR_B1_EN, HIGH);
+  delay(d);
+
+  digitalWrite(MOTOR_B2_EN, LOW);
+  digitalWrite(MOTOR_B2_F,  LOW);
+  delay(d);
+
+  digitalWrite(MOTOR_B2_R,  HIGH);
+  digitalWrite(MOTOR_B2_EN, HIGH);
+  delay(d);
+
+  digitalWrite(MOTOR_B1_EN, LOW);
+  digitalWrite(MOTOR_B1_R,  LOW);
+  delay(d);
+
+  digitalWrite(MOTOR_B2_EN, LOW);
+  digitalWrite(MOTOR_B2_R,  LOW);
+  delay(d);
+
+  } else {
+
+  digitalWrite(MOTOR_B1_F,  HIGH);
+  digitalWrite(MOTOR_B1_EN, HIGH);
+  delay(d);
+
+  digitalWrite(MOTOR_B2_R,  HIGH);
+  digitalWrite(MOTOR_B2_EN, HIGH);
+  delay(d);
+  
+  digitalWrite(MOTOR_B1_EN, LOW);
+  digitalWrite(MOTOR_B1_F,  LOW);
+  delay(d);
+
+  digitalWrite(MOTOR_B1_R,  HIGH);
+  digitalWrite(MOTOR_B1_EN, HIGH);
+  delay(d);
+
+  digitalWrite(MOTOR_B2_EN, LOW);
+  digitalWrite(MOTOR_B2_R,  LOW);
+  delay(d);
+
+  digitalWrite(MOTOR_B2_F,  HIGH);
+  digitalWrite(MOTOR_B2_EN, HIGH);
+  delay(d);
+
+  digitalWrite(MOTOR_B1_EN, LOW);
+  digitalWrite(MOTOR_B1_R,  LOW);
+  delay(d);
+
+  digitalWrite(MOTOR_B2_EN, LOW);
+  digitalWrite(MOTOR_B2_F,  LOW);
+  delay(d);
+  
+  
+  }
+
+  N++;
+  
+}
+#endif
+
 
 
