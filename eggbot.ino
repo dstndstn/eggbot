@@ -28,9 +28,9 @@ int main() {
  A is a 4-winding model
  B is a bipolar model
 
- both scavenged from old floppy drives or other such old equipment
- during my youth.
-
+ A was scavenged from an old floppy drive from my youth; B, with
+ attached gears, are from an inkjet printer's paper roller.
+ 
  For microstepping, I use PWM on motor B, which is driven by an
  SN754410 H-bridge.
 
@@ -40,22 +40,22 @@ int main() {
  available, I use two 74LS00 chips to AND the PWM Enable and
  Forward/Reverse bits, and on the SN754410 tie the Enable pins high.
 
- Pins:
+ The pen is raised and lowered via a standard DC motor with a gear,
+ controlled with a bipolar-transistor H-bridge to allow forward and
+ reverse control.  We bit-bang a PWM to lower the pen gently.
 
- Motor B:
- * 11 -> M1 enable
- * 2  -> M1 forward
- * 4  -> M1 reverse
- * 3  -> M2 enable
- * 5  -> M2 forward
- * 6  -> M2 reverse
+/*
+ * Pins for Motor A (rotating the egg), which is a 4-winding model.
  */
-
 #define MOTOR_A_1 7
 #define MOTOR_A_2 8
 #define MOTOR_A_3 9
 #define MOTOR_A_4 10
 
+/*
+ * Pins for Motor B (pen arm), which is a bipolar model.  We use two PWM channels
+ * (on the ENable pins) to do microstepping.
+ */
 #define MOTOR_B1_EN 11
 #define MOTOR_B1_F  2
 #define MOTOR_B1_R  4
@@ -63,6 +63,10 @@ int main() {
 #define MOTOR_B2_F  5
 #define MOTOR_B2_R  6
 
+/*
+ * Pins for the pen up/down motor, which is a regular DC motor controlled by a
+ * transistor H-bridge.
+ */
 #define PEN_UP 12
 #define PEN_DOWN 13
 
@@ -72,6 +76,8 @@ int main() {
  * In Arduino, timer0 used for delay()
  * timer1 used for servo
  * timer2 used for tone
+ * 
+ * We still want to use delay(), so we'll take over timer2 for PWM.
  * 
  * Pins:
  * OC0A = PD6  --> Arduino pin  6
@@ -120,7 +126,7 @@ void setup() {
     pinMode(PEN_DOWN,  OUTPUT);
     digitalWrite(PEN_DOWN, LOW);
 
-    if (1) {
+    // Set up PWM on timer 2.
     // Timer 2: WMG2 = 0x3 (fast PWM), COM2[AB] = 0x2 (non-inverting PWM)
     TCCR2A = _BV(COM2A1) | _BV(COM2B1) | _BV(WGM21) | _BV(WGM20);
 
@@ -133,7 +139,7 @@ void setup() {
     // For a while I thought the PWM was too fast for the motor driver.
     // Slow values can result in audible drive signals to the motor!
     // Timer 2: prescaler = 8 (CS22=0, CS21=1, CS20=0)
-    //TCCR2B = _BV(CS21);
+    // TCCR2B = _BV(CS21);
     // Timer 2: prescaler = 32
     // TCCR2B = _BV(CS21) | _BV(CS20);
     // Timer 2: prescaler = 256
@@ -143,14 +149,12 @@ void setup() {
     // TCCR2B = _BV(CS22) | _BV(CS21) | _BV(CS20);
     // vibrates!
 
+    // Output control registers
     OCR2A = 0;
     OCR2B = 0;
-    }
 
     Serial.begin(9600);
-    while (!Serial) {
-      ; // wait for serial port to connect. Needed for native USB port only
-    }
+    while (!Serial); // wait for serial port to connect.
 }
 
 int isign(int i) {
@@ -161,6 +165,9 @@ int isign(int i) {
     return 0;
 }
 
+/**
+ * A base class for motor control, keeping track of a counter that is scaled/offset.
+ */
 class Motor {
   public:
     Motor() :
@@ -186,6 +193,9 @@ class Motor {
     float offset;
 };
 
+/**
+ * 
+ */
 class MotorA : public Motor {
 public:
     MotorA(int p1, int p2, int p3, int p4) :
@@ -398,72 +408,6 @@ protected:
     int reverse2;
 };
 
-#if 0
-class MotorB : public Motor {
-public:
-    MotorB(int en1, int f1, int r1, int en2, int f2, int r2) :
-      Motor(),
-      lastx(0),
-      enable1(en1),
-      forward1(f1),
-      reverse1(r1),
-      enable2(en2),
-      forward2(f2),
-      reverse2(r2)
-    {
-    }
-
-    virtual void go_to(float thex) {
-        x = thex;
-
-        int ix = (int)x;
-        if (ix == lastx)
-          return;
-
-        ix = ix % 4;
-        if (ix < 0)
-          ix += 4;
-        lastx = ix;
-        
-        digitalWrite(enable1,  LOW);
-        digitalWrite(forward1, LOW);
-        digitalWrite(reverse1, LOW);
-        digitalWrite(enable2,  LOW);
-        digitalWrite(forward2, LOW);
-        digitalWrite(reverse2, LOW);
-
-        switch (ix) {
-          case 0:
-            digitalWrite(forward1, HIGH);
-            digitalWrite(enable1,  HIGH);
-            break;
-          case 1:
-            digitalWrite(forward2, HIGH);
-            digitalWrite(enable2,  HIGH);
-            break;
-          case 2:
-            digitalWrite(reverse1, HIGH);
-            digitalWrite(enable1,  HIGH);
-            break;
-          case 3:
-            digitalWrite(reverse2, HIGH);
-            digitalWrite(enable2,  HIGH);
-            break;
-        }
-    }
-
-protected:
-    int lastx;
-    
-    int enable1;
-    int forward1;
-    int reverse1;
-    int enable2;
-    int forward2;
-    int reverse2;
-};
-#endif
-
 
 MotorB mb(MOTOR_B1_EN, MOTOR_B1_F, MOTOR_B1_R,
           MOTOR_B2_EN, MOTOR_B2_F, MOTOR_B2_R);
@@ -480,280 +424,108 @@ int d = 1;
 // motor B: ~240 across the width of the egg
 // motor A:  400 steps around the egg
 
-
 // inkscape interface;
 // 9600 baud
 // v\r -> EBBx
 // http://evil-mad.github.io/EggBot/ebb.html
 
 void loop() {
+  /**
+   * We implement just enough of the EggBot serial interface to integrate with Inkscape.
+   * 
+   * Conveniently, you can also use the Arduino Serial Monitor window to test it.
+   */
   char linebuffer[32];
-  if (Serial.available() > 0) {
-    int nr = Serial.readBytesUntil('\r', linebuffer, sizeof(linebuffer)-1);
-    linebuffer[nr] = '\0';
-    if (nr == 0)
-      return;
-    String line(linebuffer);
-    line.toUpperCase();
-    if (line.startsWith("V") || line.startsWith("v")) {
-      String reply = String("EBB LANG1 ") + line + String("\r\n");
-      Serial.write(reply.c_str());
-      //Serial.write("EBB LANG1 " + line + "\r\n");
-    } else if (line.startsWith("QB")) {
-      Serial.write("0\r\nOK\r\n");
-    } else if (line.startsWith("SC,4,") || // pen up limit
-               line.startsWith("SC,5,") || // pen down limit
-               line.startsWith("SC,11,") || // pen up speed
-               line.startsWith("SC,12,") || // pen down speed
-               line.startsWith("EM,1,1")    // enable motor 1
-               ) {
-      // Pen up/down servo positions
-      Serial.write("OK\r\n");
-    } else if (line.startsWith("SP,")) {
-       line = line.substring(3);
-       if (line.startsWith("1")) {
+  // Wait until a byte is available.
+  if (Serial.available() == 0)
+    return;
+
+  // Read a line at a time.
+  int nr = Serial.readBytesUntil('\r', linebuffer, sizeof(linebuffer)-1);
+  linebuffer[nr] = '\0';
+  if (nr == 0)
+    return;
+  // Parse commands
+  String line(linebuffer);
+  line.toUpperCase();
+  // Version
+  if (line.startsWith("V") || line.startsWith("v")) {
+    String reply = String("EBB LANG1 ") + line + String("\r\n");
+    Serial.write(reply.c_str());
+  // Query buttons
+  } else if (line.startsWith("QB")) {
+    Serial.write("0\r\nOK\r\n");
+  // setup commands that we don't implement
+  } else if (line.startsWith("SC,4,") || // pen up limit
+             line.startsWith("SC,5,") || // pen down limit
+             line.startsWith("SC,11,") || // pen up speed
+             line.startsWith("SC,12,") || // pen down speed
+             line.startsWith("EM,1,1")    // enable motor 1
+             ) {
+    // Pen up/down servo positions
+    Serial.write("OK\r\n");
+  // Set Pen (1=up)
+  } else if (line.startsWith("SP,")) {
+    line = line.substring(3);
+    if (line.startsWith("1")) {
+      // Thwack
+      digitalWrite(PEN_UP, HIGH);
+      delay(500);
+    } else if (line.startsWith("0")) {
+      // Pen down -- bit-banging PWM to let it down gently,
+      // and then run the motor in reverse to reset it back to its rest position.
+      // 10 steps of 50 ms each, bit-bang the PEN_UP motor from all-on to all-off.
+      for (int i=1; i<10; i++) {
+        for (int j=0; j<5; j++) {
           digitalWrite(PEN_UP, HIGH);
-          delay(500);
-       } else if (line.startsWith("0")) {
-          //digitalWrite(PEN_UP, LOW);
-          // in 10 steps of 50 ms each, bit-bang the PEN_UP motor from all-on to all-off.
-          for (int i=0; i<10; i++) {
-            for (int j=0; j<5; j++) {
-              digitalWrite(PEN_UP, HIGH);
-              delay(10-i);
-              digitalWrite(PEN_UP, LOW);
-              delay(i);
-            }
-          }
-          delay(500);
-          digitalWrite(PEN_DOWN, HIGH);
-          delay(500);
-          digitalWrite(PEN_DOWN, LOW);
-       }
-      Serial.write("OK\r\n");
-    } else if (line.startsWith("SM,")) {
-       line = line.substring(3);
-       int comma = line.indexOf(',');
-       String ss = line.substring(0, comma);
-       long dur = ss.toInt();
-       line = line.substring(comma+1);
-       comma = line.indexOf(',');
-       float axis1, axis2;
-       if (comma == -1) {
-         axis2 = 0.0;
-         axis1 = line.toFloat();
-       } else {
-         ss = line.substring(0, comma);
-         axis1 = ss.toFloat();
-         line = line.substring(comma+1);
-         axis2 = line.toFloat();
-       }
-
-      float scalea = 0.125;
-      float scaleb = 0.208;
-       
-       axis1 /= dur;
-       axis2 /= dur;
-       while (dur > 0) {
-         mb.step(axis1 * scaleb);
-         ma.step(axis2 * scalea);
-         dur--;
-         delay(1);
-       }
-      Serial.write("OK\r\n");
-       
-    }
-    // SM,3297,-122,1313
-  }
-}
-
-void loopNothing() {
-  int i;
-  int j;
-  int k;
-  for (j=0; j<24; j++) {
-    if (j % 2 == 1) {
-      digitalWrite(PEN_UP, HIGH);
+          delay(10-i);
+          digitalWrite(PEN_UP, LOW);
+          delay(i);
+        }
+      }
       delay(500);
-      for (k=0; k<100; k++) {
-        mb.step(-0.1);
-        delay(d);
-      }
-      digitalWrite(PEN_UP, LOW);
+      // Thwack
+      digitalWrite(PEN_DOWN, HIGH);
       delay(500);
-      continue;
+      digitalWrite(PEN_DOWN, LOW);
+    }
+    Serial.write("OK\r\n");
+  // Set Motors (draw a line)
+  // SM,duration,dx[,dy]
+  } else if (line.startsWith("SM,")) {
+    line = line.substring(3);
+    int comma = line.indexOf(',');
+    String ss = line.substring(0, comma);
+    long dur = ss.toInt();
+    line = line.substring(comma+1);
+    comma = line.indexOf(',');
+    float axis1, axis2;
+    if (comma == -1) {
+      axis2 = 0.0;
+      axis1 = line.toFloat();
+    } else {
+      ss = line.substring(0, comma);
+      axis1 = ss.toFloat();
+      line = line.substring(comma+1);
+      axis2 = line.toFloat();
     }
 
-    for (k=0; k<10; k++) {
-      /*
-      for (i=0; i<4000; i++) {
-        ma.step(da);
-        delay(d);
-      }
-      */
-      for (i=0; i<800; i++) {
-        ma.step(0.5);
+    // Scalings from Eggbot coordinates to our motor coords
+    float scalea = 0.125;
+    float scaleb = 0.208;
 
-        mb.step(-1./800);
-
-        delay(d);
-      }
-      //mb.step(-1.);
+    // We move in 1-ms steps -- should probably instead step by minimum resolvable motor motion!
+    // The Inkscape/Eggbot control panel allows setting the max motor speed, so this seems to work fine.
+    axis1 /= dur;
+    axis2 /= dur;
+    while (dur > 0) {
+      mb.step(axis1 * scaleb);
+      ma.step(axis2 * scalea);
+      dur--;
+      delay(1);
     }
+    Serial.write("OK\r\n");
   }
 }
-
-#if 0
-int starting = 1;
-void loop() {
-  if (starting == 1) {
-      digitalWrite(PEN_UP, HIGH);
-      delay(100);
-      starting = 2;
-  }
-  if (starting == 2) {
-    mb.step(db);
-    N += 1;
-    if (N == 1000) {
-      starting = 3;
-      N = 0;
-
-      digitalWrite(PEN_UP, LOW);
-      delay(100);
-    }
-  }
-  if (starting == 3) {
-    ma.step(da);
-    N += 1;
-    if (N == 4000) {
-      starting = 4;
-      N = 0;
-    }
-  }
-  delay(d);
-}
-#endif
-
-/*
-void loop() {
-
-  if (N > 2000) {
-      db *= -1;
-      digitalWrite(PEN_UP, HIGH);
-      delay(2000);
-      digitalWrite(PEN_UP, LOW);
-      
-      N = 0;
-  }
-  mb.step(db);
-  ma.step(da);
-
-  delay(d);
-  N += 1;
-}
-*/
-
-#if 0
-/*
-  digitalWrite(MOTOR_B1_F,  HIGH);
-  digitalWrite(MOTOR_B1_EN, HIGH);
-  delay(d);
-  digitalWrite(MOTOR_B1_EN, LOW);
-  digitalWrite(MOTOR_B1_F,  LOW);
-
-  digitalWrite(MOTOR_B2_F,  HIGH);
-  digitalWrite(MOTOR_B2_EN, HIGH);
-  delay(d);
-  digitalWrite(MOTOR_B2_EN, LOW);
-  digitalWrite(MOTOR_B2_F,  LOW);
-
-  digitalWrite(MOTOR_B1_R,  HIGH);
-  digitalWrite(MOTOR_B1_EN, HIGH);
-  delay(d);
-  digitalWrite(MOTOR_B1_EN, LOW);
-  digitalWrite(MOTOR_B1_R,  LOW);
-
-  digitalWrite(MOTOR_B2_R,  HIGH);
-  digitalWrite(MOTOR_B2_EN, HIGH);
-  delay(d);
-  digitalWrite(MOTOR_B2_EN, LOW);
-  digitalWrite(MOTOR_B2_R,  LOW);
-*/
-  if ((N % 80) < 40) {
-
-  digitalWrite(MOTOR_B1_F,  HIGH);
-  digitalWrite(MOTOR_B1_EN, HIGH);
-  delay(d);
-
-  digitalWrite(MOTOR_B2_F,  HIGH);
-  digitalWrite(MOTOR_B2_EN, HIGH);
-  delay(d);
-  
-  digitalWrite(MOTOR_B1_EN, LOW);
-  digitalWrite(MOTOR_B1_F,  LOW);
-  delay(d);
-
-  digitalWrite(MOTOR_B1_R,  HIGH);
-  digitalWrite(MOTOR_B1_EN, HIGH);
-  delay(d);
-
-  digitalWrite(MOTOR_B2_EN, LOW);
-  digitalWrite(MOTOR_B2_F,  LOW);
-  delay(d);
-
-  digitalWrite(MOTOR_B2_R,  HIGH);
-  digitalWrite(MOTOR_B2_EN, HIGH);
-  delay(d);
-
-  digitalWrite(MOTOR_B1_EN, LOW);
-  digitalWrite(MOTOR_B1_R,  LOW);
-  delay(d);
-
-  digitalWrite(MOTOR_B2_EN, LOW);
-  digitalWrite(MOTOR_B2_R,  LOW);
-  delay(d);
-
-  } else {
-
-  digitalWrite(MOTOR_B1_F,  HIGH);
-  digitalWrite(MOTOR_B1_EN, HIGH);
-  delay(d);
-
-  digitalWrite(MOTOR_B2_R,  HIGH);
-  digitalWrite(MOTOR_B2_EN, HIGH);
-  delay(d);
-  
-  digitalWrite(MOTOR_B1_EN, LOW);
-  digitalWrite(MOTOR_B1_F,  LOW);
-  delay(d);
-
-  digitalWrite(MOTOR_B1_R,  HIGH);
-  digitalWrite(MOTOR_B1_EN, HIGH);
-  delay(d);
-
-  digitalWrite(MOTOR_B2_EN, LOW);
-  digitalWrite(MOTOR_B2_R,  LOW);
-  delay(d);
-
-  digitalWrite(MOTOR_B2_F,  HIGH);
-  digitalWrite(MOTOR_B2_EN, HIGH);
-  delay(d);
-
-  digitalWrite(MOTOR_B1_EN, LOW);
-  digitalWrite(MOTOR_B1_R,  LOW);
-  delay(d);
-
-  digitalWrite(MOTOR_B2_EN, LOW);
-  digitalWrite(MOTOR_B2_F,  LOW);
-  delay(d);
-  
-  
-  }
-
-  N++;
-  
-}
-#endif
-
 
 
