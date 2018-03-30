@@ -162,7 +162,7 @@ void setup() {
     OCR2A = 0;
     OCR2B = 0;
 
-    //Serial.begin(9600);
+    Serial.begin(9600);
 }
 
 /*
@@ -196,6 +196,7 @@ class Motor {
      
     virtual void zero() {
       offset = x;
+      x = 0;
     }
 
     void step(float dx) {
@@ -328,13 +329,6 @@ public:
         
     }
 
-    //float theta;
-   // float x;
-    //float scale;
-    //float offset;
-    //float step;
-    //float delay;
-
 protected:
     int lastic;
     int lastis;
@@ -350,15 +344,15 @@ public:
       {}
 
     virtual void zero() {
-      Motor::zero();
+      x = 0;
+      offset = 0;
       theta_offset = last_theta;
-      last_theta = 0;
     }
 
     virtual void go_to(float thex) {
         x = thex;
         float theta = (x - offset) * scale;
-        int itheta = int(theta) - theta_offset;
+        int itheta = int(theta) + theta_offset;
         int pause = 0;
         // Step there -- at most one of these loops will run
         for (; last_theta < itheta; last_theta++) {
@@ -374,25 +368,76 @@ public:
           pause = 1;
         }
     }
+    float stepdelay;
 
 protected:
     int last_theta;
     int theta_offset;
-    float stepdelay;
 
 };
 
-MotorB mb;
 
+
+MotorB mb;
 MotorA ma;
 
 
-//float theta = M_PI;
-int d = 1;
-//float dtheta = -0.01;
+class Pen {
+  public:
+  Pen() :
+  x(0),
+  y(0),
+  step(0.2),
+  pause(2)
+  {}
 
+  void zero() {
+    ma.zero();
+    mb.zero();
+    x = y = 0;
+  }
+
+  void go_to(float new_x, float new_y) {
+    float dx = (new_x - x);
+    float dy = (new_y - y);
+    float dist = sqrt(dx*dx + dy*dy);
+    int nsteps = ceil(dist / step);
+    float sx = step * dx / dist;
+    float sy = step * dy / dist;
+    // all but last step -- full step size.
+    for (int i=0; i<nsteps-1; i++) {
+      ma.step(sy);
+      mb.step(sx);
+      x += sx;
+      y += sy;
+      delay(pause);
+    }
+    // last step -- go there!
+    ma.step(new_x - x);
+    mb.step(new_y - y);
+  }
+
+  void pen_up() {
+      digitalWrite(PEN_UP, HIGH);
+      delay(100);
+  }
+
+  void pen_down() {
+      digitalWrite(PEN_UP, LOW);
+      delay(100);
+  }
+  
+  float x;
+  float y;
+  float step;
+  float pause;
+  
+};
+
+Pen pen;
+
+int d = 1;
 float theta = 0;
-//float dtheta = 0.01;
 float DT = 2.*M_PI / 256.0;
 float dtheta = DT;
 
@@ -406,20 +451,15 @@ int aa = 0;
 void loop() {
 
   if (!inited) {
-    /*
-      for (int i=0; i<700; i++) {
-        mb.step(dtheta);
-        delay(d);
-      }
-    */
       digitalWrite(PEN_UP, HIGH);
       delay(100);
 
-      float ds = 0.02;
-      for (int i=0; i<2500; i++) {
+      float ds = 0.04;
+      for (int i=0; i<1250; i++) {
         mb.step(-ds);
         delay(d);
       }
+      /*
       for (int i=0; i<750; i++) {
         mb.step(ds);
         delay(d);
@@ -432,46 +472,164 @@ void loop() {
         mb.step(ds);
         delay(d);
       }
-      /*
-      for (int i=0; i<1000; i++) {
-        mb.step(-ds);
+      */
+      for (int i=0; i<625; i++) {
+        mb.step(ds);
         delay(d);
       }
-      */      
+      // about 20. in total sweep.
       
-      /*
-      digitalWrite(PEN_UP, LOW);
-      delay(100);
-      */
-
-      /*
-      mb.theta = 0.;
-      mb.go_to(0.);
-      mb.theta = 0.;
-      delay(1000);
-      */
       mb.zero();
+      mb.scale = -0.1;
 
       /*
-      for (int i=0; i<400; i++) {
-        ma++;
-        motor_A_to(ma);
-        delay(d);
+      for (int i=0; i<200; i++) {
+        mb.step(1.);
+        delay(10);
+      }
+      for (int i=0; i<200; i++) {
+        mb.step(-1.);
+        delay(10);
       }
       */
 
+      ma.stepdelay = 2;
       ma.go_to(400);
-
+      ma.stepdelay = 1;
+      ma.zero();
+      ma.scale = 0.5;
       inited = 1;
+
+      ma.scale *= 0.4;
+      mb.scale *= 0.4;
+
+      pen.go_to( 0, 0);
+      pen.pen_down();
+
+      Serial.print("eggbot> ");
+      Serial.flush();
   }
 
-  //if ((dtheta > 0) && (mb.theta >= 2.*M_PI)) {
-  if (mb.x >= 2.*M_PI) {
-      //dtheta *= -1;
+  if (Serial.available() == 0) {
+    delay(1);
+    return;
+  }
 
+  char cmd[32];
+  memset(cmd, 0, 32);
+  int i;
+  for (i=0; i<32-1; i++) {
+    int r = Serial.read();
+    if (r == -1)
+      return;
+
+    Serial.print("read: ");
+    Serial.println((char)r);
+    Serial.flush();
+
+    if (r == ' ')
+      break;
+    if (r == '\n')
+      break;
+    cmd[i] = r;
+  }
+  float ydir = 0;
+  float xdir = 0;
+  Serial.print("cmd: '");
+  Serial.print((const char*)cmd);
+  Serial.println("'");
+  if (strcmp(cmd, "up") == 0) {
+    Serial.println("up ");
+    ydir = 1;   
+  } else if (strcmp(cmd, "down") == 0) {
+    Serial.println("down ");
+    ydir = -1;
+  } else if (strcmp(cmd, "left") == 0) {
+    Serial.println("left ");
+    xdir = -1;
+  } else if (strcmp(cmd, "right") == 0) {
+    Serial.println("right ");
+    xdir = 1;
+  } else if (strcmp(cmd, "penup") == 0) {
+    Serial.println("pen up ");
+    pen.pen_up();
+    return;
+  } else if (strcmp(cmd, "pendown") == 0) {
+    Serial.println("pen down ");
+    pen.pen_down();
+    return;
+  } else {
+    Serial.print("unknown command '");
+    Serial.print(cmd);
+    Serial.println("'");
+    return;
+  }
+  float dist = 0;
+  if ((xdir != 0) || (ydir != 0)) {
+    dist = Serial.parseFloat();
+  }
+  if (dist != 0) {
+    Serial.println(dist);
+    pen.go_to(pen.x + xdir * dist, pen.y + ydir * dist);
+  }
+  while (1) {
+     int r = Serial.read();
+    Serial.print("read ");
+    Serial.println(r);
+    Serial.flush();
+     if (r == '\n')
+       return;
+  }
+
+  /*
+  // V
+  pen.go_to(50, -100);
+  pen.go_to(100, 0);
+
+  // I
+  pen.pen_up();
+  pen.go_to(125, 0);
+  pen.pen_down();
+  pen.go_to(125, -100);
+
+  // V
+  pen.pen_up();
+  pen.go_to(150, 0);
+  pen.pen_down();
+  pen.go_to(200, -100);
+  pen.go_to(250,  0);
+  pen.pen_up();
+
+  // I
+  pen.go_to(275, 0);
+  pen.pen_down();
+  pen.go_to(275, -100);
+  pen.pen_up();
+
+  // J
+  pen.go_to(50, 200);
+  pen.pen_down();
+  pen.go_to(50, 100);
+  pen.go_to(0,  100);
+  pen.go_to(0,  150);
+  pen.pen_up();
+
+  pen.go_to(0, 400);
+  pen.zero();
+  */
+  
+  /*
+  pen.go_to(  0,   0);
+  pen.go_to(100,   0);
+  pen.go_to(100, 100);
+  pen.go_to(  0, 100);
+  pen.go_to(  0,   0);
+  */
+
+/*
+  if (mb.x >= 2.*M_PI) {
       mb.go_to(2.*M_PI);
       delay(100);
-      
       for (int i=0; i<800; i++) {
         ma.step(1.);
         delay(2 * d);
@@ -480,76 +638,24 @@ void loop() {
       for (;;) {
          delay(1000);
       }
-      
-      /*
-      dtheta = -0.1;
-
-      digitalWrite(PEN_UP, HIGH);
-      delay(500);
-
-      while (mb.theta > 0) {
-          mb.step(dtheta);
-          delay(10*d);
-      }
-      aa = 0;
-
-      digitalWrite(PEN_UP, LOW);
-      delay(500);
-*/
-  //}
-  //if ((dtheta < 0) && (mb.theta < 0)) { //-3 * M_PI)) {
-  //    dtheta = DT;
-  //    mb.theta = 0.0 - dtheta;
-  //    mb.go_to(0.0);
-
-  //    digitalWrite(PEN_UP, LOW);
-  //    delay(500);
-
   }
 
-
-  //if ((aa > 0) && (aa % 8 == 0)) {
-      digitalWrite(PEN_UP, HIGH);
-      delay(100);
-
-      for (int i=0; i<5; i++) {
+      
+    digitalWrite(PEN_UP, HIGH);
+    delay(100);
+    for (int i=0; i<5; i++) {
         ma.step(1);
         delay(10 * d);
-      }
-      digitalWrite(PEN_UP, LOW);
-      delay(100);
-
-      /*
-      for (int i=0; i<64; i++) {
-        mb.step(dtheta);
-        delay(5*d);
-      }
-      for (int i=0; i<64; i++) {
-        mb.step(-dtheta);
-        delay(5*d);
-      }
-      */
-  //}
-  //aa++;
-
-  mb.step(dtheta);
-  delay(10*d);
-
-/*
-    float dr = 2.*M_PI / 200;
-    for (int i=0; i<10; i++) {
-      float s = sin(r);
-      r += dr/10.0;
-      float t = s * M_PI;
-      mb.go_to(t);
-      delay(20*d);
     }
-*/
-    
+    digitalWrite(PEN_UP, LOW);
+    delay(100);
+
+    mb.step(dtheta);
+    delay(10*d);
+
     ma.step(1);
-    //ma++;
-    //motor_A_to(ma);
     delay(20 * d);
+    */
 }
 
 
